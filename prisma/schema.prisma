@@ -1,15 +1,14 @@
 // Prisma schema for the Stream Rentals manager.
 //
-// Dev uses SQLite (zero setup). For your cloud deployment, switch `provider`
-// to "postgresql" and point DATABASE_URL at your hosted Postgres (Neon,
-// Supabase, Railway, etc.) — the models below are Postgres-compatible.
+// Uses PostgreSQL (Neon). The connection string lives in DATABASE_URL
+// (local: .env — gitignored; production: set it in the Vercel dashboard).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
