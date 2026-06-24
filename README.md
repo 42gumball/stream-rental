@@ -42,7 +42,7 @@ Log in with the value of `APP_PASSWORD` from your `.env`.
 | `REMINDER_LEAD_DAYS` | Start reminding this many days before "paid until" runs out (default 5). |
 | `OWNER_NAME` | Your name/business, shown in customer messages. |
 | `OWNER_EMAIL` / `OWNER_PHONE` | Where **your own** bill reminders are sent. |
-| `TELCOSMS_API_URL` / `TELCOSMS_API_TOKEN` / `TELCOSMS_SENDER` | Enables real SMS via TelcoSMS. |
+| `TELCOSMS_API_TOKEN` (and optional `TELCOSMS_API_URL`) | Enables real SMS via TelcoSMS. |
 | `RESEND_API_KEY` / `RESEND_FROM` | Enables real email. |
 
 If a channel's keys are blank, that channel runs in **dry-run** mode — reminders
@@ -53,11 +53,10 @@ you try everything safely before paying for SMS/email.
 
 ## Sending real reminders
 
-- **SMS — [TelcoSMS](https://telcosms.co.ao/):** create an account, get your API
-  token and send endpoint (from your dashboard or suporte@telcosms.co.ao), then set
-  `TELCOSMS_API_URL`, `TELCOSMS_API_TOKEN`, `TELCOSMS_SENDER`. The request shape is
-  in `lib/notify.ts` (one clearly-marked block) — adjust it if your account's API
-  uses different field names.
+- **SMS — [TelcoSMS](https://telcosms.co.ao/):** copy your **PRD API key**
+  (`api_key_app`) from the dashboard and set `TELCOSMS_API_TOKEN`. That's it — the
+  v2 endpoint is the default. Phone numbers are auto-converted from `+244…` to the
+  9-digit local format TelcoSMS expects. (API: `POST /api/v2/send_message`.)
 - **Email — [Resend](https://resend.com/):** create an account, verify a sender
   domain/address, then set `RESEND_API_KEY` and `RESEND_FROM`.
 

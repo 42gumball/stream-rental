@@ -2,8 +2,11 @@ import { prisma } from "@/lib/db";
 
 export type SendResult = { status: "sent" | "failed" | "dryrun"; error?: string };
 
-const smsConfigured = () =>
-  !!(process.env.TELCOSMS_API_URL && process.env.TELCOSMS_API_TOKEN);
+// TelcoSMS v2 send endpoint (https://telcosms.co.ao). Override via env if needed.
+const TELCOSMS_ENDPOINT =
+  process.env.TELCOSMS_API_URL || "https://www.telcosms.co.ao/api/v2/send_message";
+
+const smsConfigured = () => !!process.env.TELCOSMS_API_TOKEN;
 
 const emailConfigured = () => !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM);
 
@@ -11,32 +14,34 @@ export function providerStatus() {
   return { sms: smsConfigured(), email: emailConfigured() };
 }
 
-// SMS via TelcoSMS (https://telcosms.co.ao) — an Angolan SMS gateway.
-//
-// TelcoSMS publishes its exact API only inside your account / on request from
-// suporte@telcosms.co.ao, so the request shape below is the common gateway
-// pattern (HTTPS POST + Bearer token + JSON body). If your account's docs use
-// different field names or auth, adjust ONLY the marked block — nothing else.
+// TelcoSMS expects the Angolan national number (9 digits, e.g. 9XXXXXXXX),
+// while we store contacts in international form (+244…). Strip the country code.
+function toLocalAoNumber(raw: string): string {
+  let d = raw.replace(/\D/g, "");
+  if (d.startsWith("244")) d = d.slice(3);
+  return d;
+}
+
+// SMS via TelcoSMS — auth is the api_key_app inside the JSON body (no header).
 async function sendSms(to: string, body: string): Promise<SendResult> {
   if (!smsConfigured()) return { status: "dryrun" };
   try {
-    // ----- ADJUST HERE to match your TelcoSMS API docs if needed -----
-    const res = await fetch(process.env.TELCOSMS_API_URL!, {
+    const res = await fetch(TELCOSMS_ENDPOINT, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.TELCOSMS_API_TOKEN!}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        sender: process.env.TELCOSMS_SENDER || "StreamRent",
-        recipient: to, // phone in international format, e.g. 2449XXXXXXXX
-        message: body,
+        message: {
+          api_key_app: process.env.TELCOSMS_API_TOKEN!,
+          phone_number: toLocalAoNumber(to),
+          message_body: body,
+        },
       }),
     });
-    // -----------------------------------------------------------------
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      return { status: "failed", error: `TelcoSMS HTTP ${res.status} ${text}`.trim() };
+    const data = (await res.json().catch(() => null)) as { status?: number; message?: string } | null;
+    // TelcoSMS returns { status: 200, message: "Sucess", ... } on success.
+    const ok = res.ok && (data?.status == null || Number(data.status) === 200);
+    if (!ok) {
+      return { status: "failed", error: `TelcoSMS: ${data?.message ?? `HTTP ${res.status}`}` };
     }
     return { status: "sent" };
   } catch (e) {
