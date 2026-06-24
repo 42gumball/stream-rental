@@ -20,7 +20,7 @@ export default async function SettingsPage() {
       <div className="card">
         <div className="label">Sending channels</div>
         <div className="mt-2 flex flex-col gap-2 text-sm">
-          <Channel ok={sms} name="SMS (Twilio)" hint="Set TWILIO_* in .env" />
+          <Channel ok={sms} name="SMS (TelcoSMS)" hint="Set TELCOSMS_* in .env" />
           <Channel ok={email} name="Email (Resend)" hint="Set RESEND_API_KEY & RESEND_FROM" />
         </div>
         {(!sms || !email) && (

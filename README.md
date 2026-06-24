@@ -42,7 +42,7 @@ Log in with the value of `APP_PASSWORD` from your `.env`.
 | `REMINDER_LEAD_DAYS` | Start reminding this many days before "paid until" runs out (default 5). |
 | `OWNER_NAME` | Your name/business, shown in customer messages. |
 | `OWNER_EMAIL` / `OWNER_PHONE` | Where **your own** bill reminders are sent. |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` | Enables real SMS. |
+| `TELCOSMS_API_URL` / `TELCOSMS_API_TOKEN` / `TELCOSMS_SENDER` | Enables real SMS via TelcoSMS. |
 | `RESEND_API_KEY` / `RESEND_FROM` | Enables real email. |
 
 If a channel's keys are blank, that channel runs in **dry-run** mode — reminders
@@ -53,8 +53,11 @@ you try everything safely before paying for SMS/email.
 
 ## Sending real reminders
 
-- **SMS — [Twilio](https://www.twilio.com/):** create an account, get a phone
-  number, then set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`.
+- **SMS — [TelcoSMS](https://telcosms.co.ao/):** create an account, get your API
+  token and send endpoint (from your dashboard or suporte@telcosms.co.ao), then set
+  `TELCOSMS_API_URL`, `TELCOSMS_API_TOKEN`, `TELCOSMS_SENDER`. The request shape is
+  in `lib/notify.ts` (one clearly-marked block) — adjust it if your account's API
+  uses different field names.
 - **Email — [Resend](https://resend.com/):** create an account, verify a sender
   domain/address, then set `RESEND_API_KEY` and `RESEND_FROM`.
 
@@ -96,7 +99,7 @@ You can also trigger a pass manually in **Settings → Run reminders now**.
 
 ## Tech
 
-Next.js 16 (App Router) · Prisma 6 · Tailwind CSS v4 · Twilio · Resend.
+Next.js 16 (App Router) · Prisma 6 · Tailwind CSS v4 · TelcoSMS · Resend.
 
 | Path | What's there |
 | --- | --- |
@@ -105,5 +108,5 @@ Next.js 16 (App Router) · Prisma 6 · Tailwind CSS v4 · Twilio · Resend.
 | `app/api/cron/reminders/` | The scheduled reminder endpoint |
 | `lib/actions.ts` | All create/update/delete + mark-paid + reminder actions |
 | `lib/reminders.ts` | Who is due + message templates + sending |
-| `lib/notify.ts` | SMS (Twilio) + email (Resend), with dry-run fallback |
+| `lib/notify.ts` | SMS (TelcoSMS) + email (Resend), with dry-run fallback |
 | `prisma/schema.prisma` | Data model |

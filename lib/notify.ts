@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 export type SendResult = { status: "sent" | "failed" | "dryrun"; error?: string };
 
 const smsConfigured = () =>
-  !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM);
+  !!(process.env.TELCOSMS_API_URL && process.env.TELCOSMS_API_TOKEN);
 
 const emailConfigured = () => !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM);
 
@@ -11,13 +11,33 @@ export function providerStatus() {
   return { sms: smsConfigured(), email: emailConfigured() };
 }
 
+// SMS via TelcoSMS (https://telcosms.co.ao) — an Angolan SMS gateway.
+//
+// TelcoSMS publishes its exact API only inside your account / on request from
+// suporte@telcosms.co.ao, so the request shape below is the common gateway
+// pattern (HTTPS POST + Bearer token + JSON body). If your account's docs use
+// different field names or auth, adjust ONLY the marked block — nothing else.
 async function sendSms(to: string, body: string): Promise<SendResult> {
   if (!smsConfigured()) return { status: "dryrun" };
   try {
-    // Imported lazily so the app runs even if the package isn't needed.
-    const twilio = (await import("twilio")).default;
-    const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
-    await client.messages.create({ to, from: process.env.TWILIO_FROM!, body });
+    // ----- ADJUST HERE to match your TelcoSMS API docs if needed -----
+    const res = await fetch(process.env.TELCOSMS_API_URL!, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.TELCOSMS_API_TOKEN!}`,
+      },
+      body: JSON.stringify({
+        sender: process.env.TELCOSMS_SENDER || "StreamRent",
+        recipient: to, // phone in international format, e.g. 2449XXXXXXXX
+        message: body,
+      }),
+    });
+    // -----------------------------------------------------------------
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { status: "failed", error: `TelcoSMS HTTP ${res.status} ${text}`.trim() };
+    }
     return { status: "sent" };
   } catch (e) {
     return { status: "failed", error: e instanceof Error ? e.message : String(e) };
