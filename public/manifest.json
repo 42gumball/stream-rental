@@ -1,0 +1,17 @@
+{
+  "name": "Stream Rentals",
+  "short_name": "Rentals",
+  "description": "Manage your rented Spotify & Netflix accounts",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,36 +1,109 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Stream Rentals
 
-## Getting Started
+A mobile-first web app to manage the Spotify and Netflix accounts you rent out.
 
-First, run the development server:
+- **Spotify** — track each family plan (admin, login, bill due date, who's in it,
+  what you pay) and each slot you rent (username, price, "paid until" date).
+- **Netflix** — track each Premium account and which profile belongs to whom.
+- **Payments** — mark customers paid (records revenue) and mark your own bills
+  paid (records expenses). The **Money** page shows revenue, expenses and profit.
+- **Reminders** — automatically remind customers by **SMS + email** before their
+  "paid until" date runs out, and remind **you** before each Spotify/Netflix bill.
+
+The core idea: every rental has a **"paid until"** date. Someone who paid until
+December simply never appears as "due" until December. Anyone whose date is past
+or within a few days shows up on the dashboard and gets reminded.
+
+---
+
+## Quick start (local)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env      # then edit .env (at least APP_PASSWORD)
+npm run setup             # creates the database + example data
+npm run dev               # open http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Log in with the value of `APP_PASSWORD` from your `.env`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> Tip: open it on your phone and "Add to Home Screen" — it installs like an app.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## Environment variables (`.env`)
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | What it does |
+| --- | --- |
+| `DATABASE_URL` | Database connection. Dev = SQLite file. Prod = Postgres URL. |
+| `APP_PASSWORD` | The password you type to log in. **Change it.** |
+| `SESSION_SECRET` | Long random string that signs your login cookie. **Change it.** |
+| `CRON_SECRET` | Secret the scheduler must pass to run reminders. **Change it.** |
+| `REMINDER_LEAD_DAYS` | Start reminding this many days before "paid until" runs out (default 5). |
+| `OWNER_NAME` | Your name/business, shown in customer messages. |
+| `OWNER_EMAIL` / `OWNER_PHONE` | Where **your own** bill reminders are sent. |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` | Enables real SMS. |
+| `RESEND_API_KEY` / `RESEND_FROM` | Enables real email. |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+If a channel's keys are blank, that channel runs in **dry-run** mode — reminders
+are logged (Settings → Reminder history) but not actually delivered. This lets
+you try everything safely before paying for SMS/email.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Sending real reminders
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **SMS — [Twilio](https://www.twilio.com/):** create an account, get a phone
+  number, then set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`.
+- **Email — [Resend](https://resend.com/):** create an account, verify a sender
+  domain/address, then set `RESEND_API_KEY` and `RESEND_FROM`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Customer message wording lives in `lib/reminders.ts` (currently Portuguese) — edit
+freely.
+
+### Scheduling the daily run
+
+The reminder pass is exposed at:
+
+```
+GET /api/cron/reminders?secret=YOUR_CRON_SECRET
+```
+
+- **Vercel:** `vercel.json` already defines a 09:00 daily cron — just put your
+  real `CRON_SECRET` into the path there.
+- **Anywhere else:** point a scheduler (cron-job.org, GitHub Actions, a server
+  crontab) at that URL once a day.
+
+You can also trigger a pass manually in **Settings → Run reminders now**.
+
+---
+
+## Deploying with a cloud database (Postgres)
+
+1. Create a Postgres database (Neon, Supabase, or Railway all have free tiers).
+2. In `prisma/schema.prisma`, change the datasource provider:
+   ```prisma
+   datasource db {
+     provider = "postgresql"
+     url      = env("DATABASE_URL")
+   }
+   ```
+3. Set `DATABASE_URL` to your Postgres connection string (in the host's env vars).
+4. Run `npx prisma db push` once against it to create the tables.
+5. Deploy (e.g. `vercel`). Set all the env vars in the host dashboard.
+
+---
+
+## Tech
+
+Next.js 16 (App Router) · Prisma 6 · Tailwind CSS v4 · Twilio · Resend.
+
+| Path | What's there |
+| --- | --- |
+| `app/(app)/` | The screens (dashboard, spotify, netflix, people, money, settings) |
+| `app/login/` | Owner login |
+| `app/api/cron/reminders/` | The scheduled reminder endpoint |
+| `lib/actions.ts` | All create/update/delete + mark-paid + reminder actions |
+| `lib/reminders.ts` | Who is due + message templates + sending |
+| `lib/notify.ts` | SMS (Twilio) + email (Resend), with dry-run fallback |
+| `prisma/schema.prisma` | Data model |
