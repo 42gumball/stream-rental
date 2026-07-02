@@ -22,11 +22,11 @@ export function Stat({
   accent?: string;
 }) {
   return (
-    <div className="card" style={{ padding: 14 }}>
-      <div className="label" style={{ marginBottom: 4 }}>
+    <div className="card" style={{ padding: 16 }}>
+      <div className="label" style={{ marginBottom: 6 }}>
         {label}
       </div>
-      <div className="text-xl font-bold" style={{ color: accent }}>
+      <div className="text-2xl font-bold tracking-tight" style={{ color: accent }}>
         {value}
       </div>
     </div>

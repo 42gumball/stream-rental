@@ -20,10 +20,8 @@ async function main() {
   await prisma.payment.deleteMany();
   await prisma.expense.deleteMany();
   await prisma.reminderLog.deleteMany();
-  await prisma.spotifyRental.deleteMany();
-  await prisma.netflixProfile.deleteMany();
-  await prisma.spotifyAccount.deleteMany();
-  await prisma.netflixAccount.deleteMany();
+  await prisma.slot.deleteMany();
+  await prisma.account.deleteMany();
   await prisma.customer.deleteMany();
 
   // People
@@ -38,10 +36,11 @@ async function main() {
   });
 
   // Spotify family account (you pay 3400 Kz/mo), bill due in 6 days
-  const family = await prisma.spotifyAccount.create({
+  const family = await prisma.account.create({
     data: {
+      platform: "spotify",
       label: "Family 1",
-      adminName: "Me",
+      ownerName: "Me",
       loginEmail: "myfamily@gmail.com",
       monthlyCost: 3400,
       maxSlots: 6,
@@ -51,67 +50,84 @@ async function main() {
   });
 
   // Ana paid until December (won't show as due). Bruno is overdue.
-  await prisma.spotifyRental.create({
+  await prisma.slot.create({
     data: {
       accountId: family.id,
       customerId: ana.id,
-      spotifyUsername: "ana_s",
+      name: "ana_s",
       price: 2000,
       paidThrough: decemberEnd(),
     },
   });
-  await prisma.spotifyRental.create({
+  await prisma.slot.create({
     data: {
       accountId: family.id,
       customerId: bruno.id,
-      spotifyUsername: "bruno_c",
+      name: "bruno_c",
       price: 2000,
       paidThrough: daysFromNow(-4), // overdue
     },
   });
 
-  // Netflix Premium account (you pay 7000 Kz/mo), bill due in 3 days
-  const nflx = await prisma.netflixAccount.create({
+  // Netflix account (you pay 7000 Kz/mo), bill due in 3 days
+  const nflx = await prisma.account.create({
     data: {
+      platform: "netflix",
       label: "Netflix 1",
+      planName: "Premium",
       loginEmail: "mynetflix@gmail.com",
-      plan: "Premium",
       monthlyCost: 7000,
-      maxProfiles: 5,
+      maxSlots: 5,
       dueDate: daysFromNow(3),
       paidThrough: daysFromNow(3),
     },
   });
 
-  // Carla rents a profile, due in 2 days. One profile still free.
-  await prisma.netflixProfile.create({
+  // Carla rents a profile, due in 2 days. One profile still free (unassigned).
+  await prisma.slot.create({
     data: {
       accountId: nflx.id,
-      profileName: "Perfil 1",
+      name: "Perfil 1",
       customerId: carla.id,
       price: 3000,
       paidThrough: daysFromNow(2),
     },
   });
-  await prisma.netflixProfile.create({
-    data: { accountId: nflx.id, profileName: "Perfil 2", price: 3000 },
+  await prisma.slot.create({
+    data: { accountId: nflx.id, name: "Perfil 2", price: 3000 },
+  });
+
+  // Hulu account — shows a third platform working with zero schema changes.
+  const hulu = await prisma.account.create({
+    data: {
+      platform: "hulu",
+      label: "Hulu 1",
+      planName: "No Ads",
+      monthlyCost: 5000,
+      maxSlots: 6,
+      dueDate: daysFromNow(9),
+      paidThrough: daysFromNow(9),
+    },
+  });
+  await prisma.slot.create({
+    data: { accountId: hulu.id, name: "Ana profile", customerId: ana.id, price: 2500, paidThrough: daysFromNow(10) },
   });
 
   // A couple of historical payments + the bills you've paid (for the reports).
   await prisma.payment.createMany({
     data: [
-      { service: "spotify", customerId: ana.id, amount: 2000, periodEnd: decemberEnd() },
-      { service: "netflix", customerId: carla.id, amount: 3000, periodEnd: daysFromNow(2) },
+      { platform: "spotify", customerId: ana.id, amount: 2000, periodEnd: decemberEnd() },
+      { platform: "netflix", customerId: carla.id, amount: 3000, periodEnd: daysFromNow(2) },
     ],
   });
   await prisma.expense.createMany({
     data: [
-      { service: "spotify", spotifyAccountId: family.id, label: "Family 1", amount: 3400 },
-      { service: "netflix", netflixAccountId: nflx.id, label: "Netflix 1", amount: 7000 },
+      { platform: "spotify", accountId: family.id, label: "Family 1", amount: 3400 },
+      { platform: "netflix", accountId: nflx.id, label: "Netflix 1", amount: 7000 },
     ],
   });
 
-  console.log("Seeded: 3 people, 1 Spotify family, 1 Netflix account.");
+  console.log("Seeded: 3 people; Spotify, Netflix and Hulu accounts.");
 }
 
 main()

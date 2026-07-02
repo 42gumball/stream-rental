@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Trash2, Music2, Clapperboard } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { formatKz } from "@/lib/money";
 import { fmtDate } from "@/lib/dates";
+import { getPlatform } from "@/lib/platforms";
 import { StatusBadge, SectionHeader, Empty } from "@/components/ui";
 import { deleteCustomer, updateCustomer } from "@/lib/actions";
 
@@ -14,8 +15,7 @@ export default async function CustomerDetail({ params }: { params: Promise<{ id:
   const customer = await prisma.customer.findUnique({
     where: { id },
     include: {
-      spotifyRentals: { include: { account: true } },
-      netflixProfiles: { include: { account: true } },
+      slots: { include: { account: true } },
       payments: { orderBy: { paidAt: "desc" }, take: 20 },
     },
   });
@@ -40,38 +40,31 @@ export default async function CustomerDetail({ params }: { params: Promise<{ id:
       </div>
 
       <SectionHeader title="Subscriptions" />
-      {customer.spotifyRentals.length === 0 && customer.netflixProfiles.length === 0 ? (
+      {customer.slots.length === 0 ? (
         <Empty>No active subscriptions.</Empty>
       ) : (
         <div className="flex flex-col gap-3">
-          {customer.spotifyRentals.map((r) => (
-            <Link key={r.id} href={`/spotify/${r.accountId}`} className="card flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Music2 size={15} style={{ color: "var(--color-spotify)" }} />
-                  <span className="font-semibold">{r.account.label}</span>
-                  <StatusBadge paidThrough={r.paidThrough} />
+          {customer.slots.map((s) => {
+            const cfg = getPlatform(s.account.platform);
+            const Icon = cfg.icon;
+            return (
+              <Link key={s.id} href={`/accounts/${s.accountId}`} className="card flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Icon size={15} style={{ color: cfg.color }} />
+                    <span className="font-semibold">
+                      {s.account.label}
+                      {s.name ? ` · ${s.name}` : ""}
+                    </span>
+                    <StatusBadge paidThrough={s.paidThrough} />
+                  </div>
+                  <div className="mt-1 text-sm muted">
+                    {formatKz(s.price)} · until {fmtDate(s.paidThrough)}
+                  </div>
                 </div>
-                <div className="mt-1 text-sm muted">
-                  {formatKz(r.price)} · until {fmtDate(r.paidThrough)}
-                </div>
-              </div>
-            </Link>
-          ))}
-          {customer.netflixProfiles.map((p) => (
-            <Link key={p.id} href={`/netflix/${p.accountId}`} className="card flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Clapperboard size={15} style={{ color: "var(--color-netflix)" }} />
-                  <span className="font-semibold">{p.account.label} · {p.profileName}</span>
-                  <StatusBadge paidThrough={p.paidThrough} />
-                </div>
-                <div className="mt-1 text-sm muted">
-                  {formatKz(p.price)} · until {fmtDate(p.paidThrough)}
-                </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
 
@@ -83,7 +76,7 @@ export default async function CustomerDetail({ params }: { params: Promise<{ id:
           {customer.payments.map((p) => (
             <div key={p.id} className="flex items-center justify-between border-b py-1 text-sm last:border-0" style={{ borderColor: "var(--color-border)" }}>
               <span>
-                {fmtDate(p.paidAt)} · <span className="muted">{p.service}</span>
+                {fmtDate(p.paidAt)} · <span className="muted">{getPlatform(p.platform).name}</span>
               </span>
               <span className="font-semibold" style={{ color: "var(--color-pos)" }}>
                 {formatKz(p.amount)}

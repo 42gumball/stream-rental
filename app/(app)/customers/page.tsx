@@ -11,8 +11,7 @@ export default async function CustomersPage() {
   const customers = await prisma.customer.findMany({
     orderBy: { name: "asc" },
     include: {
-      spotifyRentals: { where: { active: true } },
-      netflixProfiles: { where: { active: true } },
+      slots: { where: { active: true } },
     },
   });
 
@@ -39,12 +38,10 @@ export default async function CustomersPage() {
       {customers.length === 0 ? (
         <Empty>No people yet. Add your first customer above.</Empty>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           {customers.map((c) => {
-            const subs = c.spotifyRentals.length + c.netflixProfiles.length;
-            const due =
-              c.spotifyRentals.some((r) => needsReminder(r.paidThrough)) ||
-              c.netflixProfiles.some((p) => needsReminder(p.paidThrough));
+            const subs = c.slots.length;
+            const due = c.slots.some((s) => needsReminder(s.paidThrough));
             return (
               <Link key={c.id} href={`/customers/${c.id}`} className="card flex items-center justify-between gap-3">
                 <div>

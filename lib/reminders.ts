@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { notify } from "@/lib/notify";
 import { formatKz } from "@/lib/money";
 import { daysUntil, fmtDate, needsReminder, payStatus } from "@/lib/dates";
+import { getPlatform } from "@/lib/platforms";
 
 const ownerName = () => process.env.OWNER_NAME || "Stream Rentals";
 
@@ -10,7 +11,7 @@ const ownerName = () => process.env.OWNER_NAME || "Stream Rentals";
 
 function customerMessage(
   customerName: string,
-  service: "Spotify" | "Netflix",
+  platformName: string,
   detail: string,
   price: number,
   paidThrough: Date | null,
@@ -22,7 +23,7 @@ function customerMessage(
   else when = `vence em ${fmtDate(paidThrough)}`;
 
   return (
-    `Olá ${customerName}! Lembrete da tua subscrição ${service} (${detail}). ` +
+    `Olá ${customerName}! Lembrete da tua subscrição ${platformName} (${detail}). ` +
     `O pagamento de ${formatKz(price)} ${when}. ` +
     `Por favor regulariza para manteres o acesso. Obrigado — ${ownerName()}.`
   );
@@ -31,13 +32,13 @@ function customerMessage(
 // ---- Owner-facing message (your own bills) ----
 
 function ownerBillMessage(
-  service: "Spotify" | "Netflix",
+  platformName: string,
   label: string,
   cost: number,
   dueDate: Date | null,
 ): string {
   return (
-    `[${ownerName()}] A tua conta ${service} "${label}" (${formatKz(cost)}) ` +
+    `[${ownerName()}] A tua conta ${platformName} "${label}" (${formatKz(cost)}) ` +
     `vence em ${fmtDate(dueDate)}. Não te esqueças de pagar ao fornecedor.`
   );
 }
@@ -70,59 +71,29 @@ export async function runReminders(): Promise<RunSummary> {
     details: [],
   };
 
-  // --- Spotify rentals ---
-  const rentals = await prisma.spotifyRental.findMany({
-    where: { active: true },
-    include: { customer: true, account: true },
-  });
-  for (const r of rentals) {
-    if (!needsReminder(r.paidThrough)) continue;
-    summary.customerReminders++;
-    const msg = customerMessage(
-      r.customer.name,
-      "Spotify",
-      r.account.label,
-      r.price,
-      r.paidThrough,
-    );
-    await sendToCustomer(summary, r.customer, "Lembrete de pagamento — Spotify", msg);
-  }
-
-  // --- Netflix profiles ---
-  const profiles = await prisma.netflixProfile.findMany({
+  // --- Customer shares (slots) across every platform ---
+  const slots = await prisma.slot.findMany({
     where: { active: true, customerId: { not: null } },
     include: { customer: true, account: true },
   });
-  for (const p of profiles) {
-    if (!p.customer) continue;
-    if (!needsReminder(p.paidThrough)) continue;
+  for (const s of slots) {
+    if (!s.customer) continue;
+    if (!needsReminder(s.paidThrough)) continue;
+    const cfg = getPlatform(s.account.platform);
     summary.customerReminders++;
-    const msg = customerMessage(
-      p.customer.name,
-      "Netflix",
-      `perfil ${p.profileName}`,
-      p.price,
-      p.paidThrough,
-    );
-    await sendToCustomer(summary, p.customer, "Lembrete de pagamento — Netflix", msg);
+    const detail = s.name ? `${cfg.slotNoun} ${s.name}` : s.account.label;
+    const msg = customerMessage(s.customer.name, cfg.name, detail, s.price, s.paidThrough);
+    await sendToCustomer(summary, s.customer, `Lembrete de pagamento — ${cfg.name}`, msg);
   }
 
-  // --- Owner bills (Spotify) ---
-  const spotifyAccounts = await prisma.spotifyAccount.findMany();
-  for (const a of spotifyAccounts) {
+  // --- Owner bills across every platform ---
+  const accounts = await prisma.account.findMany();
+  for (const a of accounts) {
     if (payStatus(a.dueDate) === "paid") continue;
     if (!a.dueDate) continue;
+    const cfg = getPlatform(a.platform);
     summary.ownerReminders++;
-    await sendToOwner(summary, ownerBillMessage("Spotify", a.label, a.monthlyCost, a.dueDate));
-  }
-
-  // --- Owner bills (Netflix) ---
-  const netflixAccounts = await prisma.netflixAccount.findMany();
-  for (const a of netflixAccounts) {
-    if (payStatus(a.dueDate) === "paid") continue;
-    if (!a.dueDate) continue;
-    summary.ownerReminders++;
-    await sendToOwner(summary, ownerBillMessage("Netflix", a.label, a.monthlyCost, a.dueDate));
+    await sendToOwner(summary, ownerBillMessage(cfg.name, a.label, a.monthlyCost, a.dueDate));
   }
 
   return summary;
@@ -193,11 +164,11 @@ async function sendToOwner(summary: RunSummary, message: string) {
   }
 }
 
-// Send a single reminder to one customer for a specific rental/profile (used by
-// the "Remind now" buttons in the UI).
+// Send a single reminder to one customer for a specific slot (used by the
+// "Remind now" buttons in the UI).
 export async function remindOneCustomer(
   customerId: string,
-  service: "spotify" | "netflix",
+  platformName: string,
   detail: string,
   price: number,
   paidThrough: Date | null,
@@ -216,14 +187,8 @@ export async function remindOneCustomer(
     summary.details.push("customer not found");
     return summary;
   }
-  const msg = customerMessage(
-    customer.name,
-    service === "spotify" ? "Spotify" : "Netflix",
-    detail,
-    price,
-    paidThrough,
-  );
-  const subject = `Lembrete de pagamento — ${service === "spotify" ? "Spotify" : "Netflix"}`;
+  const msg = customerMessage(customer.name, platformName, detail, price, paidThrough);
+  const subject = `Lembrete de pagamento — ${platformName}`;
   await sendToCustomer(summary, customer, subject, msg);
   return summary;
 }

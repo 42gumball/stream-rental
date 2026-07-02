@@ -2,6 +2,11 @@
 //
 // Uses PostgreSQL (Neon). The connection string lives in DATABASE_URL
 // (local: .env — gitignored; production: set it in the Vercel dashboard).
+//
+// Streaming platforms are generalized: a single `Account` (a plan you pay for)
+// owns many `Slot`s (the shares you rent out). The `platform` field selects
+// per-platform behavior/terminology from lib/platforms.ts — so Spotify uses
+// "members", Netflix uses "profiles", and new platforms are just a code entry.
 
 generator client {
   provider = "prisma-client-js"
@@ -21,71 +26,43 @@ model Customer {
   notes     String?
   createdAt DateTime @default(now())
 
-  spotifyRentals  SpotifyRental[]
-  netflixProfiles NetflixProfile[]
-  payments        Payment[]
-  reminders       ReminderLog[]
+  slots     Slot[]
+  payments  Payment[]
+  reminders ReminderLog[]
 }
 
-/// One Spotify Family plan that YOU pay for and rent slots from.
-model SpotifyAccount {
+/// A streaming-platform account YOU pay for and rent shareable slots from.
+/// `platform` ("spotify" | "netflix" | "hulu" | …) drives behavior in code.
+model Account {
   id            String    @id @default(cuid())
-  label         String // e.g. "Family 1"
-  adminName     String? // who is the admin of this plan
-  loginEmail    String? // the Spotify account login (for your reference)
+  platform      String
+  label         String // e.g. "Family 1", "Netflix 1"
+  ownerName     String? // plan admin/owner where relevant (Spotify admin, Apple organizer)
+  planName      String? // plan tier where relevant (Netflix "Premium")
+  loginEmail    String? // the account login (for your reference)
   loginPassword String? // optional, stored for your reference only
-  monthlyCost   Int       @default(0) // what YOU pay Spotify per cycle (Kz)
-  maxSlots      Int       @default(6) // Family = up to 6 people incl. admin
-  dueDate       DateTime? // when YOUR next payment to Spotify is due
-  paidThrough   DateTime? // you have paid Spotify up to this date
+  monthlyCost   Int       @default(0) // what YOU pay the platform per cycle (Kz)
+  maxSlots      Int       @default(6) // how many people this plan fits
+  dueDate       DateTime? // when YOUR next payment to the platform is due
+  paidThrough   DateTime? // you have paid the platform up to this date
   createdAt     DateTime  @default(now())
 
-  rentals  SpotifyRental[]
+  slots    Slot[]
   expenses Expense[]
+
+  @@index([platform])
 }
 
-/// A slot in a Spotify Family plan rented to a customer.
-model SpotifyRental {
-  id              String    @id @default(cuid())
-  customerId      String
-  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  accountId       String
-  account         SpotifyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  spotifyUsername String? // the username associated to this person
-  price           Int       @default(2000) // Kz per cycle
-  paidThrough     DateTime? // this customer has paid you up to this date
-  active          Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-
-  payments Payment[]
-}
-
-/// One Netflix Premium account that YOU pay for and rent profiles from.
-model NetflixAccount {
-  id            String    @id @default(cuid())
-  label         String // e.g. "Netflix 1"
-  loginEmail    String?
-  loginPassword String?
-  plan          String    @default("Premium")
-  monthlyCost   Int       @default(0) // what YOU pay Netflix per cycle (Kz)
-  maxProfiles   Int       @default(5)
-  dueDate       DateTime? // when YOUR next payment to Netflix is due
-  paidThrough   DateTime? // you have paid Netflix up to this date
-  createdAt     DateTime  @default(now())
-
-  profiles NetflixProfile[]
-  expenses Expense[]
-}
-
-/// A Netflix profile rented to a customer.
-model NetflixProfile {
+/// One shareable slot in an Account, rented to a customer (a Spotify member, a
+/// Netflix profile, …). May be left unassigned for platforms that allow it.
+model Slot {
   id          String    @id @default(cuid())
   accountId   String
-  account     NetflixAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  profileName String
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   customerId  String?
   customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  price       Int       @default(3000) // Kz per cycle
+  name        String? // profile name / username / slot label
+  price       Int       @default(0) // Kz per cycle the customer pays you
   paidThrough DateTime? // this customer has paid you up to this date
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now())
@@ -95,41 +72,37 @@ model NetflixProfile {
 
 /// Money coming IN — a customer paid you. Drives the revenue report.
 model Payment {
-  id               String    @id @default(cuid())
-  service          String // "spotify" | "netflix"
-  customerId       String?
-  customer         Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  spotifyRentalId  String?
-  spotifyRental    SpotifyRental? @relation(fields: [spotifyRentalId], references: [id], onDelete: SetNull)
-  netflixProfileId String?
-  netflixProfile   NetflixProfile? @relation(fields: [netflixProfileId], references: [id], onDelete: SetNull)
-  amount           Int // Kz
-  paidAt           DateTime  @default(now())
-  periodEnd        DateTime? // the new "paid through" date this payment covers
-  method           String? // cash, transfer, etc.
-  note             String?
-  createdAt        DateTime  @default(now())
+  id         String    @id @default(cuid())
+  platform   String // "spotify" | "netflix" | …
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  slotId     String?
+  slot       Slot?     @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  amount     Int // Kz
+  paidAt     DateTime  @default(now())
+  periodEnd  DateTime? // the new "paid through" date this payment covers
+  method     String? // cash, transfer, etc.
+  note       String?
+  createdAt  DateTime  @default(now())
 }
 
-/// Money going OUT — you paid Spotify/Netflix. Drives the expense report.
+/// Money going OUT — you paid a platform. Drives the expense report.
 model Expense {
-  id               String    @id @default(cuid())
-  service          String // "spotify" | "netflix" | "other"
-  spotifyAccountId String?
-  spotifyAccount   SpotifyAccount? @relation(fields: [spotifyAccountId], references: [id], onDelete: SetNull)
-  netflixAccountId String?
-  netflixAccount   NetflixAccount? @relation(fields: [netflixAccountId], references: [id], onDelete: SetNull)
-  label            String?
-  amount           Int // Kz
-  paidAt           DateTime  @default(now())
-  periodEnd        DateTime? // the new "paid through" date this payment covers
-  note             String?
-  createdAt        DateTime  @default(now())
+  id        String    @id @default(cuid())
+  platform  String // "spotify" | "netflix" | "other" | …
+  accountId String?
+  account   Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  label     String?
+  amount    Int // Kz
+  paidAt    DateTime  @default(now())
+  periodEnd DateTime? // the new "paid through" date this payment covers
+  note      String?
+  createdAt DateTime  @default(now())
 }
 
 /// Audit log of every reminder sent (to customers or to you).
 model ReminderLog {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   audience   String // "customer" | "owner"
@@ -139,5 +112,5 @@ model ReminderLog {
   message    String
   status     String // "sent" | "failed" | "dryrun"
   error      String?
-  sentAt     DateTime @default(now())
+  sentAt     DateTime  @default(now())
 }

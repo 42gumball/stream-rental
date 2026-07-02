@@ -2,26 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Music2, Clapperboard, Users, Wallet } from "lucide-react";
-
-const tabs = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/spotify", label: "Spotify", icon: Music2 },
-  { href: "/netflix", label: "Netflix", icon: Clapperboard },
-  { href: "/customers", label: "People", icon: Users },
-  { href: "/finances", label: "Money", icon: Wallet },
-];
+import { tabs, isActive } from "@/components/nav";
 
 export default function BottomNav() {
   const pathname = usePathname();
   return (
     <nav
-      className="fixed bottom-0 inset-x-0 z-20 border-t"
+      className="fixed bottom-0 inset-x-0 z-20 border-t md:hidden"
       style={{ background: "rgba(255,255,255,0.88)", borderColor: "var(--color-border)", backdropFilter: "blur(10px)" }}
     >
       <div className="mx-auto flex max-w-md items-stretch justify-between px-2 pb-[env(safe-area-inset-bottom)]">
         {tabs.map(({ href, label, icon: Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const active = isActive(pathname, href);
           return (
             <Link
               key={href}

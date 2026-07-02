@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { parseKz } from "@/lib/money";
 import { extendByMonths } from "@/lib/dates";
+import { getPlatform } from "@/lib/platforms";
 import { remindOneCustomer, runReminders } from "@/lib/reminders";
 
 // ---------- FormData helpers ----------
@@ -67,16 +68,20 @@ export async function deleteCustomer(fd: FormData) {
   redirect("/customers");
 }
 
-// ================= Spotify accounts =================
-export async function createSpotifyAccount(fd: FormData) {
-  await prisma.spotifyAccount.create({
+// ================= Accounts (streaming plans) =================
+export async function createAccount(fd: FormData) {
+  const platform = reqStr(fd, "platform");
+  const cfg = getPlatform(platform);
+  await prisma.account.create({
     data: {
+      platform,
       label: reqStr(fd, "label"),
-      adminName: str(fd, "adminName"),
+      ownerName: str(fd, "ownerName"),
+      planName: str(fd, "planName") ?? cfg.planDefault ?? null,
       loginEmail: str(fd, "loginEmail"),
       loginPassword: str(fd, "loginPassword"),
-      monthlyCost: int(fd, "monthlyCost"),
-      maxSlots: int(fd, "maxSlots", 6),
+      monthlyCost: int(fd, "monthlyCost", cfg.defaultMonthlyCost),
+      maxSlots: int(fd, "maxSlots", cfg.defaultMaxSlots),
       dueDate: date(fd, "dueDate"),
       paidThrough: date(fd, "paidThrough"),
     },
@@ -84,16 +89,17 @@ export async function createSpotifyAccount(fd: FormData) {
   revalidateAll();
 }
 
-export async function updateSpotifyAccount(fd: FormData) {
-  await prisma.spotifyAccount.update({
+export async function updateAccount(fd: FormData) {
+  await prisma.account.update({
     where: { id: reqStr(fd, "id") },
     data: {
       label: reqStr(fd, "label"),
-      adminName: str(fd, "adminName"),
+      ownerName: str(fd, "ownerName"),
+      planName: str(fd, "planName"),
       loginEmail: str(fd, "loginEmail"),
       loginPassword: str(fd, "loginPassword"),
       monthlyCost: int(fd, "monthlyCost"),
-      maxSlots: int(fd, "maxSlots", 6),
+      maxSlots: int(fd, "maxSlots", 1),
       dueDate: date(fd, "dueDate"),
       paidThrough: date(fd, "paidThrough"),
     },
@@ -101,16 +107,16 @@ export async function updateSpotifyAccount(fd: FormData) {
   revalidateAll();
 }
 
-export async function deleteSpotifyAccount(fd: FormData) {
-  await prisma.spotifyAccount.delete({ where: { id: reqStr(fd, "id") } });
+export async function deleteAccount(fd: FormData) {
+  await prisma.account.delete({ where: { id: reqStr(fd, "id") } });
   revalidateAll();
-  redirect("/spotify");
+  redirect("/accounts");
 }
 
-// Owner pays the Spotify bill → records an expense and advances the dates.
-export async function paySpotifyBill(fd: FormData) {
+// Owner pays the platform bill → records an expense and advances the dates.
+export async function payAccountBill(fd: FormData) {
   const id = reqStr(fd, "id");
-  const account = await prisma.spotifyAccount.findUnique({ where: { id } });
+  const account = await prisma.account.findUnique({ where: { id } });
   if (!account) return;
   const months = int(fd, "months", 1);
   const amount = fd.get("amount") ? parseKz(fd.get("amount")) : account.monthlyCost;
@@ -118,15 +124,15 @@ export async function paySpotifyBill(fd: FormData) {
   await prisma.$transaction([
     prisma.expense.create({
       data: {
-        service: "spotify",
-        spotifyAccountId: id,
+        platform: account.platform,
+        accountId: id,
         label: account.label,
         amount,
         periodEnd,
         note: str(fd, "note"),
       },
     }),
-    prisma.spotifyAccount.update({
+    prisma.account.update({
       where: { id },
       data: { paidThrough: periodEnd, dueDate: periodEnd },
     }),
@@ -134,147 +140,29 @@ export async function paySpotifyBill(fd: FormData) {
   revalidateAll();
 }
 
-// ================= Spotify rentals (customer slots) =================
-export async function addSpotifyRental(fd: FormData) {
-  await prisma.spotifyRental.create({
-    data: {
-      accountId: reqStr(fd, "accountId"),
-      customerId: reqStr(fd, "customerId"),
-      spotifyUsername: str(fd, "spotifyUsername"),
-      price: fd.get("price") ? parseKz(fd.get("price")) : 2000,
-      paidThrough: date(fd, "paidThrough"),
-    },
-  });
-  revalidateAll();
-}
-
-export async function updateSpotifyRental(fd: FormData) {
-  await prisma.spotifyRental.update({
-    where: { id: reqStr(fd, "id") },
-    data: {
-      spotifyUsername: str(fd, "spotifyUsername"),
-      price: fd.get("price") ? parseKz(fd.get("price")) : undefined,
-      paidThrough: date(fd, "paidThrough"),
-      active: fd.get("active") != null,
-    },
-  });
-  revalidateAll();
-}
-
-export async function deleteSpotifyRental(fd: FormData) {
-  await prisma.spotifyRental.delete({ where: { id: reqStr(fd, "id") } });
-  revalidateAll();
-}
-
-// Mark a Spotify customer as paid → records revenue and advances paid-through.
-export async function markSpotifyPaid(fd: FormData) {
-  const id = reqStr(fd, "id");
-  const rental = await prisma.spotifyRental.findUnique({ where: { id } });
-  if (!rental) return;
-  const months = int(fd, "months", 1);
-  const amount = fd.get("amount") ? parseKz(fd.get("amount")) : rental.price * months;
-  const periodEnd = extendByMonths(rental.paidThrough, months);
-  await prisma.$transaction([
-    prisma.payment.create({
-      data: {
-        service: "spotify",
-        customerId: rental.customerId,
-        spotifyRentalId: id,
-        amount,
-        periodEnd,
-        method: str(fd, "method"),
-      },
-    }),
-    prisma.spotifyRental.update({ where: { id }, data: { paidThrough: periodEnd } }),
-  ]);
-  revalidateAll();
-}
-
-// ================= Netflix accounts =================
-export async function createNetflixAccount(fd: FormData) {
-  await prisma.netflixAccount.create({
-    data: {
-      label: reqStr(fd, "label"),
-      loginEmail: str(fd, "loginEmail"),
-      loginPassword: str(fd, "loginPassword"),
-      plan: str(fd, "plan") ?? "Premium",
-      monthlyCost: int(fd, "monthlyCost"),
-      maxProfiles: int(fd, "maxProfiles", 5),
-      dueDate: date(fd, "dueDate"),
-      paidThrough: date(fd, "paidThrough"),
-    },
-  });
-  revalidateAll();
-}
-
-export async function updateNetflixAccount(fd: FormData) {
-  await prisma.netflixAccount.update({
-    where: { id: reqStr(fd, "id") },
-    data: {
-      label: reqStr(fd, "label"),
-      loginEmail: str(fd, "loginEmail"),
-      loginPassword: str(fd, "loginPassword"),
-      plan: str(fd, "plan") ?? "Premium",
-      monthlyCost: int(fd, "monthlyCost"),
-      maxProfiles: int(fd, "maxProfiles", 5),
-      dueDate: date(fd, "dueDate"),
-      paidThrough: date(fd, "paidThrough"),
-    },
-  });
-  revalidateAll();
-}
-
-export async function deleteNetflixAccount(fd: FormData) {
-  await prisma.netflixAccount.delete({ where: { id: reqStr(fd, "id") } });
-  revalidateAll();
-  redirect("/netflix");
-}
-
-export async function payNetflixBill(fd: FormData) {
-  const id = reqStr(fd, "id");
-  const account = await prisma.netflixAccount.findUnique({ where: { id } });
+// ================= Slots (customer shares) =================
+export async function addSlot(fd: FormData) {
+  const accountId = reqStr(fd, "accountId");
+  const account = await prisma.account.findUnique({ where: { id: accountId } });
   if (!account) return;
-  const months = int(fd, "months", 1);
-  const amount = fd.get("amount") ? parseKz(fd.get("amount")) : account.monthlyCost;
-  const periodEnd = extendByMonths(account.paidThrough, months);
-  await prisma.$transaction([
-    prisma.expense.create({
-      data: {
-        service: "netflix",
-        netflixAccountId: id,
-        label: account.label,
-        amount,
-        periodEnd,
-        note: str(fd, "note"),
-      },
-    }),
-    prisma.netflixAccount.update({
-      where: { id },
-      data: { paidThrough: periodEnd, dueDate: periodEnd },
-    }),
-  ]);
-  revalidateAll();
-}
-
-// ================= Netflix profiles =================
-export async function addNetflixProfile(fd: FormData) {
-  await prisma.netflixProfile.create({
+  const cfg = getPlatform(account.platform);
+  await prisma.slot.create({
     data: {
-      accountId: reqStr(fd, "accountId"),
-      profileName: reqStr(fd, "profileName"),
+      accountId,
       customerId: str(fd, "customerId"),
-      price: fd.get("price") ? parseKz(fd.get("price")) : 3000,
+      name: str(fd, "name"),
+      price: fd.get("price") ? parseKz(fd.get("price")) : cfg.defaultPrice,
       paidThrough: date(fd, "paidThrough"),
     },
   });
   revalidateAll();
 }
 
-export async function updateNetflixProfile(fd: FormData) {
-  await prisma.netflixProfile.update({
+export async function updateSlot(fd: FormData) {
+  await prisma.slot.update({
     where: { id: reqStr(fd, "id") },
     data: {
-      profileName: reqStr(fd, "profileName"),
+      name: str(fd, "name"),
       customerId: str(fd, "customerId"),
       price: fd.get("price") ? parseKz(fd.get("price")) : undefined,
       paidThrough: date(fd, "paidThrough"),
@@ -284,57 +172,43 @@ export async function updateNetflixProfile(fd: FormData) {
   revalidateAll();
 }
 
-export async function deleteNetflixProfile(fd: FormData) {
-  await prisma.netflixProfile.delete({ where: { id: reqStr(fd, "id") } });
+export async function deleteSlot(fd: FormData) {
+  await prisma.slot.delete({ where: { id: reqStr(fd, "id") } });
   revalidateAll();
 }
 
-export async function markNetflixPaid(fd: FormData) {
+// Mark a customer as paid → records revenue and advances paid-through.
+export async function markSlotPaid(fd: FormData) {
   const id = reqStr(fd, "id");
-  const profile = await prisma.netflixProfile.findUnique({ where: { id } });
-  if (!profile) return;
+  const slot = await prisma.slot.findUnique({ where: { id }, include: { account: true } });
+  if (!slot) return;
   const months = int(fd, "months", 1);
-  const amount = fd.get("amount") ? parseKz(fd.get("amount")) : profile.price * months;
-  const periodEnd = extendByMonths(profile.paidThrough, months);
+  const amount = fd.get("amount") ? parseKz(fd.get("amount")) : slot.price * months;
+  const periodEnd = extendByMonths(slot.paidThrough, months);
   await prisma.$transaction([
     prisma.payment.create({
       data: {
-        service: "netflix",
-        customerId: profile.customerId,
-        netflixProfileId: id,
+        platform: slot.account.platform,
+        customerId: slot.customerId,
+        slotId: id,
         amount,
         periodEnd,
         method: str(fd, "method"),
       },
     }),
-    prisma.netflixProfile.update({ where: { id }, data: { paidThrough: periodEnd } }),
+    prisma.slot.update({ where: { id }, data: { paidThrough: periodEnd } }),
   ]);
   revalidateAll();
 }
 
 // ================= Reminders =================
-export async function remindSpotifyRental(fd: FormData) {
+export async function remindSlot(fd: FormData) {
   const id = reqStr(fd, "id");
-  const rental = await prisma.spotifyRental.findUnique({
-    where: { id },
-    include: { account: true },
-  });
-  if (!rental) return;
-  await remindOneCustomer(rental.customerId, "spotify", rental.account.label, rental.price, rental.paidThrough);
-  revalidateAll();
-}
-
-export async function remindNetflixProfile(fd: FormData) {
-  const id = reqStr(fd, "id");
-  const profile = await prisma.netflixProfile.findUnique({ where: { id } });
-  if (!profile || !profile.customerId) return;
-  await remindOneCustomer(
-    profile.customerId,
-    "netflix",
-    `perfil ${profile.profileName}`,
-    profile.price,
-    profile.paidThrough,
-  );
+  const slot = await prisma.slot.findUnique({ where: { id }, include: { account: true } });
+  if (!slot || !slot.customerId) return;
+  const cfg = getPlatform(slot.account.platform);
+  const detail = slot.name ? `${cfg.slotNoun} ${slot.name}` : slot.account.label;
+  await remindOneCustomer(slot.customerId, cfg.name, detail, slot.price, slot.paidThrough);
   revalidateAll();
 }
 
