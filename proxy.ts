@@ -13,7 +13,7 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith("/api/auth");
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const authed = await verifySessionToken(token);
+  const authed = (await verifySessionToken(token)) !== null;
 
   if (!authed && !isPublic) {
     const url = req.nextUrl.clone();

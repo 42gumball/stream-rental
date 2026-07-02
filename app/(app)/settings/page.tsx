@@ -2,20 +2,29 @@ import { Send, LogOut, CheckCircle2, XCircle } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { providerStatus } from "@/lib/notify";
 import { fmtDate } from "@/lib/dates";
+import { requireUserId, getCurrentUser } from "@/lib/dal";
 import { runRemindersNow } from "@/lib/actions";
 import { SectionHeader, Empty } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
+  const userId = await requireUserId();
+  const user = await getCurrentUser();
   const { sms, email } = providerStatus();
-  const logs = await prisma.reminderLog.findMany({ orderBy: { sentAt: "desc" }, take: 25 });
+  const logs = await prisma.reminderLog.findMany({ where: { userId }, orderBy: { sentAt: "desc" }, take: 25 });
   const leadDays = process.env.REMINDER_LEAD_DAYS ?? "5";
 
   return (
     <div className="pt-3">
       <h1 className="mb-1 text-xl font-extrabold">Settings</h1>
-      <p className="muted mb-4 text-sm">Reminders, sending channels and your session.</p>
+      <p className="muted mb-4 text-sm">Your account, reminders and sending channels.</p>
+
+      <div className="card mb-4">
+        <div className="label">Signed in as</div>
+        <div className="mt-1 font-semibold">{user?.name ?? "—"}</div>
+        <div className="text-sm muted">{user?.email}</div>
+      </div>
 
       <div className="card">
         <div className="label">Sending channels</div>

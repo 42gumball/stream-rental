@@ -4,13 +4,16 @@ import { prisma } from "@/lib/db";
 import { formatKz } from "@/lib/money";
 import { fmtDate } from "@/lib/dates";
 import { getPlatform, PLATFORM_LIST } from "@/lib/platforms";
+import { requireUserId } from "@/lib/dal";
 import { StatusBadge, Empty } from "@/components/ui";
 import { createAccount } from "@/lib/actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountsPage() {
+  const userId = await requireUserId();
   const accounts = await prisma.account.findMany({
+    where: { userId },
     orderBy: [{ platform: "asc" }, { createdAt: "asc" }],
     include: { _count: { select: { slots: true } } },
   });

@@ -2,11 +2,13 @@ import Link from "next/link";
 import { Settings } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 import Sidebar from "@/components/Sidebar";
+import { getCurrentUser } from "@/lib/dal";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const user = await getCurrentUser();
   return (
     <div className="flex min-h-full w-full">
-      <Sidebar />
+      <Sidebar user={user ? { name: user.name, email: user.email, image: user.image } : null} />
 
       <div className="flex min-h-full w-full flex-1 flex-col">
         {/* Mobile top bar — the sidebar replaces it from `md` up. */}

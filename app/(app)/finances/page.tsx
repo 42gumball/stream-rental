@@ -3,23 +3,25 @@ import { prisma } from "@/lib/db";
 import { formatKz } from "@/lib/money";
 import { fmtDate } from "@/lib/dates";
 import { getPlatform, PLATFORM_LIST } from "@/lib/platforms";
+import { requireUserId } from "@/lib/dal";
 import { Stat, SectionHeader, Empty } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function FinancesPage() {
+  const userId = await requireUserId();
   const monthStart = startOfMonth(new Date());
 
   const [revAll, expAll, revMonth, expMonth, revByPlatform, expByPlatform, recentPays, recentExps] =
     await Promise.all([
-      prisma.payment.aggregate({ _sum: { amount: true } }),
-      prisma.expense.aggregate({ _sum: { amount: true } }),
-      prisma.payment.aggregate({ _sum: { amount: true }, where: { paidAt: { gte: monthStart } } }),
-      prisma.expense.aggregate({ _sum: { amount: true }, where: { paidAt: { gte: monthStart } } }),
-      prisma.payment.groupBy({ by: ["platform"], _sum: { amount: true } }),
-      prisma.expense.groupBy({ by: ["platform"], _sum: { amount: true } }),
-      prisma.payment.findMany({ orderBy: { paidAt: "desc" }, take: 10, include: { customer: true } }),
-      prisma.expense.findMany({ orderBy: { paidAt: "desc" }, take: 10 }),
+      prisma.payment.aggregate({ _sum: { amount: true }, where: { userId } }),
+      prisma.expense.aggregate({ _sum: { amount: true }, where: { userId } }),
+      prisma.payment.aggregate({ _sum: { amount: true }, where: { userId, paidAt: { gte: monthStart } } }),
+      prisma.expense.aggregate({ _sum: { amount: true }, where: { userId, paidAt: { gte: monthStart } } }),
+      prisma.payment.groupBy({ by: ["platform"], _sum: { amount: true }, where: { userId } }),
+      prisma.expense.groupBy({ by: ["platform"], _sum: { amount: true }, where: { userId } }),
+      prisma.payment.findMany({ where: { userId }, orderBy: { paidAt: "desc" }, take: 10, include: { customer: true } }),
+      prisma.expense.findMany({ where: { userId }, orderBy: { paidAt: "desc" }, take: 10 }),
     ]);
 
   const revenue = revAll._sum.amount ?? 0;

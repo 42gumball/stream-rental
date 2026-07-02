@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { parseKz } from "@/lib/money";
 import { extendByMonths } from "@/lib/dates";
 import { getPlatform } from "@/lib/platforms";
+import { requireUserId } from "@/lib/dal";
 import { remindOneCustomer, runReminders } from "@/lib/reminders";
 
 // ---------- FormData helpers ----------
@@ -37,8 +38,10 @@ function revalidateAll() {
 
 // ================= Customers =================
 export async function createCustomer(fd: FormData) {
+  const userId = await requireUserId();
   await prisma.customer.create({
     data: {
+      userId,
       name: reqStr(fd, "name"),
       phone: str(fd, "phone"),
       email: str(fd, "email"),
@@ -49,9 +52,9 @@ export async function createCustomer(fd: FormData) {
 }
 
 export async function updateCustomer(fd: FormData) {
-  const id = reqStr(fd, "id");
-  await prisma.customer.update({
-    where: { id },
+  const userId = await requireUserId();
+  await prisma.customer.updateMany({
+    where: { id: reqStr(fd, "id"), userId },
     data: {
       name: reqStr(fd, "name"),
       phone: str(fd, "phone"),
@@ -63,17 +66,20 @@ export async function updateCustomer(fd: FormData) {
 }
 
 export async function deleteCustomer(fd: FormData) {
-  await prisma.customer.delete({ where: { id: reqStr(fd, "id") } });
+  const userId = await requireUserId();
+  await prisma.customer.deleteMany({ where: { id: reqStr(fd, "id"), userId } });
   revalidateAll();
   redirect("/customers");
 }
 
 // ================= Accounts (streaming plans) =================
 export async function createAccount(fd: FormData) {
+  const userId = await requireUserId();
   const platform = reqStr(fd, "platform");
   const cfg = getPlatform(platform);
   await prisma.account.create({
     data: {
+      userId,
       platform,
       label: reqStr(fd, "label"),
       ownerName: str(fd, "ownerName"),
@@ -90,8 +96,9 @@ export async function createAccount(fd: FormData) {
 }
 
 export async function updateAccount(fd: FormData) {
-  await prisma.account.update({
-    where: { id: reqStr(fd, "id") },
+  const userId = await requireUserId();
+  await prisma.account.updateMany({
+    where: { id: reqStr(fd, "id"), userId },
     data: {
       label: reqStr(fd, "label"),
       ownerName: str(fd, "ownerName"),
@@ -108,15 +115,17 @@ export async function updateAccount(fd: FormData) {
 }
 
 export async function deleteAccount(fd: FormData) {
-  await prisma.account.delete({ where: { id: reqStr(fd, "id") } });
+  const userId = await requireUserId();
+  await prisma.account.deleteMany({ where: { id: reqStr(fd, "id"), userId } });
   revalidateAll();
   redirect("/accounts");
 }
 
 // Owner pays the platform bill → records an expense and advances the dates.
 export async function payAccountBill(fd: FormData) {
+  const userId = await requireUserId();
   const id = reqStr(fd, "id");
-  const account = await prisma.account.findUnique({ where: { id } });
+  const account = await prisma.account.findFirst({ where: { id, userId } });
   if (!account) return;
   const months = int(fd, "months", 1);
   const amount = fd.get("amount") ? parseKz(fd.get("amount")) : account.monthlyCost;
@@ -124,6 +133,7 @@ export async function payAccountBill(fd: FormData) {
   await prisma.$transaction([
     prisma.expense.create({
       data: {
+        userId,
         platform: account.platform,
         accountId: id,
         label: account.label,
@@ -142,8 +152,9 @@ export async function payAccountBill(fd: FormData) {
 
 // ================= Slots (customer shares) =================
 export async function addSlot(fd: FormData) {
+  const userId = await requireUserId();
   const accountId = reqStr(fd, "accountId");
-  const account = await prisma.account.findUnique({ where: { id: accountId } });
+  const account = await prisma.account.findFirst({ where: { id: accountId, userId } });
   if (!account) return;
   const cfg = getPlatform(account.platform);
   await prisma.slot.create({
@@ -159,8 +170,12 @@ export async function addSlot(fd: FormData) {
 }
 
 export async function updateSlot(fd: FormData) {
+  const userId = await requireUserId();
+  const id = reqStr(fd, "id");
+  const slot = await prisma.slot.findFirst({ where: { id, account: { userId } } });
+  if (!slot) return;
   await prisma.slot.update({
-    where: { id: reqStr(fd, "id") },
+    where: { id },
     data: {
       name: str(fd, "name"),
       customerId: str(fd, "customerId"),
@@ -173,14 +188,19 @@ export async function updateSlot(fd: FormData) {
 }
 
 export async function deleteSlot(fd: FormData) {
-  await prisma.slot.delete({ where: { id: reqStr(fd, "id") } });
+  const userId = await requireUserId();
+  const id = reqStr(fd, "id");
+  const slot = await prisma.slot.findFirst({ where: { id, account: { userId } } });
+  if (!slot) return;
+  await prisma.slot.delete({ where: { id } });
   revalidateAll();
 }
 
 // Mark a customer as paid → records revenue and advances paid-through.
 export async function markSlotPaid(fd: FormData) {
+  const userId = await requireUserId();
   const id = reqStr(fd, "id");
-  const slot = await prisma.slot.findUnique({ where: { id }, include: { account: true } });
+  const slot = await prisma.slot.findFirst({ where: { id, account: { userId } }, include: { account: true } });
   if (!slot) return;
   const months = int(fd, "months", 1);
   const amount = fd.get("amount") ? parseKz(fd.get("amount")) : slot.price * months;
@@ -188,6 +208,7 @@ export async function markSlotPaid(fd: FormData) {
   await prisma.$transaction([
     prisma.payment.create({
       data: {
+        userId,
         platform: slot.account.platform,
         customerId: slot.customerId,
         slotId: id,
@@ -203,16 +224,18 @@ export async function markSlotPaid(fd: FormData) {
 
 // ================= Reminders =================
 export async function remindSlot(fd: FormData) {
+  const userId = await requireUserId();
   const id = reqStr(fd, "id");
-  const slot = await prisma.slot.findUnique({ where: { id }, include: { account: true } });
+  const slot = await prisma.slot.findFirst({ where: { id, account: { userId } }, include: { account: true } });
   if (!slot || !slot.customerId) return;
   const cfg = getPlatform(slot.account.platform);
   const detail = slot.name ? `${cfg.slotNoun} ${slot.name}` : slot.account.label;
-  await remindOneCustomer(slot.customerId, cfg.name, detail, slot.price, slot.paidThrough);
+  await remindOneCustomer(userId, slot.customerId, cfg.name, detail, slot.price, slot.paidThrough);
   revalidateAll();
 }
 
 export async function runRemindersNow() {
-  await runReminders();
+  const userId = await requireUserId();
+  await runReminders(userId);
   revalidateAll();
 }

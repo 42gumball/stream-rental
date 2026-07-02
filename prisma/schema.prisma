@@ -3,10 +3,13 @@
 // Uses PostgreSQL (Neon). The connection string lives in DATABASE_URL
 // (local: .env — gitignored; production: set it in the Vercel dashboard).
 //
+// Multi-user: every top-level record belongs to a User (multi-tenant). Users
+// sign up by email/password or with Google. Data is scoped by userId in the
+// data-access layer, server actions and pages.
+//
 // Streaming platforms are generalized: a single `Account` (a plan you pay for)
 // owns many `Slot`s (the shares you rent out). The `platform` field selects
-// per-platform behavior/terminology from lib/platforms.ts — so Spotify uses
-// "members", Netflix uses "profiles", and new platforms are just a code entry.
+// per-platform behavior/terminology from lib/platforms.ts.
 
 generator client {
   provider = "prisma-client-js"
@@ -17,9 +20,29 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// An account holder. Signs in with email+password and/or Google. Owns all of
+/// their customers, streaming accounts, payments and reminders.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String? // scrypt hash; null for Google-only users
+  googleId     String?  @unique // Google "sub"; null for email-only users
+  image        String? // avatar URL from Google
+  createdAt    DateTime @default(now())
+
+  customers Customer[]
+  accounts  Account[]
+  payments  Payment[]
+  expenses  Expense[]
+  reminders ReminderLog[]
+}
+
 /// A person you rent a service to.
 model Customer {
   id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   phone     String? // used for SMS reminders (international format, e.g. +2449...)
   email     String? // used for email reminders
@@ -29,12 +52,16 @@ model Customer {
   slots     Slot[]
   payments  Payment[]
   reminders ReminderLog[]
+
+  @@index([userId])
 }
 
 /// A streaming-platform account YOU pay for and rent shareable slots from.
 /// `platform` ("spotify" | "netflix" | "hulu" | …) drives behavior in code.
 model Account {
   id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform      String
   label         String // e.g. "Family 1", "Netflix 1"
   ownerName     String? // plan admin/owner where relevant (Spotify admin, Apple organizer)
@@ -50,11 +77,13 @@ model Account {
   slots    Slot[]
   expenses Expense[]
 
+  @@index([userId])
   @@index([platform])
 }
 
 /// One shareable slot in an Account, rented to a customer (a Spotify member, a
 /// Netflix profile, …). May be left unassigned for platforms that allow it.
+/// Ownership is inherited from its Account.
 model Slot {
   id          String    @id @default(cuid())
   accountId   String
@@ -73,6 +102,8 @@ model Slot {
 /// Money coming IN — a customer paid you. Drives the revenue report.
 model Payment {
   id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform   String // "spotify" | "netflix" | …
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
@@ -84,11 +115,15 @@ model Payment {
   method     String? // cash, transfer, etc.
   note       String?
   createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }
 
 /// Money going OUT — you paid a platform. Drives the expense report.
 model Expense {
   id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform  String // "spotify" | "netflix" | "other" | …
   accountId String?
   account   Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
@@ -98,11 +133,15 @@ model Expense {
   periodEnd DateTime? // the new "paid through" date this payment covers
   note      String?
   createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 /// Audit log of every reminder sent (to customers or to you).
 model ReminderLog {
   id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   audience   String // "customer" | "owner"
@@ -113,4 +152,6 @@ model ReminderLog {
   status     String // "sent" | "failed" | "dryrun"
   error      String?
   sentAt     DateTime  @default(now())
+
+  @@index([userId])
 }

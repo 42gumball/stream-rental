@@ -68,6 +68,7 @@ async function sendEmail(to: string, subject: string, body: string): Promise<Sen
 }
 
 type NotifyArgs = {
+  userId: string;
   channel: "sms" | "email";
   to: string;
   subject?: string;
@@ -89,6 +90,7 @@ export async function notify(args: NotifyArgs): Promise<SendResult> {
 
   await prisma.reminderLog.create({
     data: {
+      userId: args.userId,
       customerId: args.customerId ?? null,
       audience: args.audience,
       channel: args.channel,

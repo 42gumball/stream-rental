@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { formatKz } from "@/lib/money";
 import { fmtDate, toDateInput } from "@/lib/dates";
 import { getPlatform } from "@/lib/platforms";
+import { requireUserId } from "@/lib/dal";
 import { StatusBadge, Empty } from "@/components/ui";
 import {
   addSlot,
@@ -25,12 +26,13 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default async function AccountDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await requireUserId();
   const [account, customers] = await Promise.all([
-    prisma.account.findUnique({
-      where: { id },
+    prisma.account.findFirst({
+      where: { id, userId },
       include: { slots: { include: { customer: true }, orderBy: { createdAt: "asc" } } },
     }),
-    prisma.customer.findMany({ orderBy: { name: "asc" } }),
+    prisma.customer.findMany({ where: { userId }, orderBy: { name: "asc" } }),
   ]);
   if (!account) notFound();
 

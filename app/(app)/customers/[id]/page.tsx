@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { formatKz } from "@/lib/money";
 import { fmtDate } from "@/lib/dates";
 import { getPlatform } from "@/lib/platforms";
+import { requireUserId } from "@/lib/dal";
 import { StatusBadge, SectionHeader, Empty } from "@/components/ui";
 import { deleteCustomer, updateCustomer } from "@/lib/actions";
 
@@ -12,8 +13,9 @@ export const dynamic = "force-dynamic";
 
 export default async function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const customer = await prisma.customer.findUnique({
-    where: { id },
+  const userId = await requireUserId();
+  const customer = await prisma.customer.findFirst({
+    where: { id, userId },
     include: {
       slots: { include: { account: true } },
       payments: { orderBy: { paidAt: "desc" }, take: 20 },

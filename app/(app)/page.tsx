@@ -4,24 +4,26 @@ import { prisma } from "@/lib/db";
 import { formatKz } from "@/lib/money";
 import { fmtDate, needsReminder, payStatus } from "@/lib/dates";
 import { getPlatform } from "@/lib/platforms";
+import { requireUserId } from "@/lib/dal";
 import { Stat, StatusBadge, SectionHeader, Empty } from "@/components/ui";
 import { markSlotPaid, payAccountBill, remindSlot } from "@/lib/actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
+  const userId = await requireUserId();
   const monthStart = startOfMonth(new Date());
 
   const [payments, expenses, monthPayments, monthExpenses, slots, accounts] = await Promise.all([
-    prisma.payment.aggregate({ _sum: { amount: true } }),
-    prisma.expense.aggregate({ _sum: { amount: true } }),
-    prisma.payment.aggregate({ _sum: { amount: true }, where: { paidAt: { gte: monthStart } } }),
-    prisma.expense.aggregate({ _sum: { amount: true }, where: { paidAt: { gte: monthStart } } }),
+    prisma.payment.aggregate({ _sum: { amount: true }, where: { userId } }),
+    prisma.expense.aggregate({ _sum: { amount: true }, where: { userId } }),
+    prisma.payment.aggregate({ _sum: { amount: true }, where: { userId, paidAt: { gte: monthStart } } }),
+    prisma.expense.aggregate({ _sum: { amount: true }, where: { userId, paidAt: { gte: monthStart } } }),
     prisma.slot.findMany({
-      where: { active: true, customerId: { not: null } },
+      where: { active: true, customerId: { not: null }, account: { userId } },
       include: { customer: true, account: true },
     }),
-    prisma.account.findMany(),
+    prisma.account.findMany({ where: { userId } }),
   ]);
 
   const revenueMonth = monthPayments._sum.amount ?? 0;

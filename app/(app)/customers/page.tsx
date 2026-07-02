@@ -2,13 +2,16 @@ import Link from "next/link";
 import { ChevronRight, Plus, Mail, Phone } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { needsReminder } from "@/lib/dates";
+import { requireUserId } from "@/lib/dal";
 import { RawBadge, Empty } from "@/components/ui";
 import { createCustomer } from "@/lib/actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function CustomersPage() {
+  const userId = await requireUserId();
   const customers = await prisma.customer.findMany({
+    where: { userId },
     orderBy: { name: "asc" },
     include: {
       slots: { where: { active: true } },
