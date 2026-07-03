@@ -233,8 +233,7 @@ export async function remindSlot(_prev: RemindState, fd: FormData): Promise<Remi
   const slot = await prisma.slot.findFirst({ where: { id, account: { userId } }, include: { account: true } });
   if (!slot || !slot.customerId) return { ok: false, message: "Customer not found." };
   const cfg = getPlatform(slot.account.platform);
-  const detail = slot.name ? `${cfg.slotNoun} ${slot.name}` : slot.account.label;
-  const summary = await remindOneCustomer(userId, slot.customerId, cfg.name, detail, slot.price, slot.paidThrough, slot.id);
+  const summary = await remindOneCustomer(userId, slot.customerId, cfg.name, slot.price, slot.paidThrough, slot.id);
   revalidateAll();
   const ok = summary.sent > 0 || summary.dryrun > 0;
   return { ok, message: summary.details.join("; ") || (ok ? "Sent." : "Not sent.") };

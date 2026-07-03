@@ -47,38 +47,27 @@ function amountBlock(label: string, amount: number, verb: string, overdue: boole
 // ---- Customer-facing reminder (Portuguese) ----
 // Edit these to change the wording/branding sent to your customers.
 
-function customerSms(
-  customerName: string,
-  senderName: string,
-  platformName: string,
-  detail: string,
-  price: number,
-  paidThrough: Date | null,
-): string {
+function customerSms(customerName: string, senderName: string, platformName: string, price: number, paidThrough: Date | null): string {
   const { verb } = dueStatus(paidThrough);
   return (
-    `Olá ${customerName}! A tua assinatura ${platformName} (${detail}) ${verb} — ${formatKz(price)}. ` +
-    `Regulariza o pagamento para manteres o acesso. Obrigado, ${senderName}! 🙂`
+    `Olá ${customerName},\n\n` +
+    `A tua assinatura ${platformName} ${verb} — ${formatKz(price)}.\n\n` +
+    `Por favor regulariza o pagamento para manteres o acesso sem interrupções.\n\n` +
+    `Atenciosamente,\n${senderName}`
   );
 }
 
-function customerEmailHtml(
-  customerName: string,
-  senderName: string,
-  platformName: string,
-  detail: string,
-  price: number,
-  paidThrough: Date | null,
-): string {
+function customerEmailHtml(customerName: string, senderName: string, platformName: string, price: number, paidThrough: Date | null): string {
   const { verb, overdue } = dueStatus(paidThrough);
   return emailShell(
     `<p style="margin:0 0 16px;font-size:15px;color:#101828;">Olá <b>${escapeHtml(customerName)}</b>,</p>` +
       `<p style="margin:0;font-size:15px;color:#344054;line-height:1.55;">` +
-      `Este é um lembrete sobre a tua assinatura de <b>${escapeHtml(platformName)}</b> (${escapeHtml(detail)}).</p>` +
+      `Este é um lembrete sobre a tua assinatura de <b>${escapeHtml(platformName)}</b>.</p>` +
       amountBlock("Valor a pagar", price, verb, overdue) +
       `<p style="margin:0;font-size:14px;color:#344054;line-height:1.55;">` +
-      `Por favor regulariza o pagamento para manteres o acesso. Obrigado! 🙂</p>` +
-      `<p style="margin:20px 0 0;font-size:14px;color:#667085;">— ${escapeHtml(senderName)}</p>`,
+      `Por favor regulariza o pagamento para manteres o acesso sem interrupções.</p>` +
+      `<p style="margin:24px 0 0;font-size:14px;color:#344054;line-height:1.55;">` +
+      `Atenciosamente,<br>${escapeHtml(senderName)}</p>`,
   );
 }
 
@@ -174,9 +163,8 @@ export async function runReminders(userId?: string): Promise<RunSummary> {
     const user = s.account.user;
     const senderName = user.name || fallbackName();
     summary.customerReminders++;
-    const detail = s.name ? `${cfg.slotNoun} ${s.name}` : s.account.label;
-    const msg = customerSms(s.customer.name, senderName, cfg.name, detail, s.price, s.paidThrough);
-    const html = customerEmailHtml(s.customer.name, senderName, cfg.name, detail, s.price, s.paidThrough);
+    const msg = customerSms(s.customer.name, senderName, cfg.name, s.price, s.paidThrough);
+    const html = customerEmailHtml(s.customer.name, senderName, cfg.name, s.price, s.paidThrough);
     const allow = {
       sms: user.smsRemindersEnabled && !sentSlotKeys.has(dedupKey(s.id, "sms", s.paidThrough)),
       email: user.emailRemindersEnabled && !sentSlotKeys.has(dedupKey(s.id, "email", s.paidThrough)),
@@ -321,7 +309,6 @@ export async function remindOneCustomer(
   userId: string,
   customerId: string,
   platformName: string,
-  detail: string,
   price: number,
   paidThrough: Date | null,
   slotId?: string,
@@ -337,8 +324,8 @@ export async function remindOneCustomer(
     return summary;
   }
   const senderName = user?.name || fallbackName();
-  const msg = customerSms(customer.name, senderName, platformName, detail, price, paidThrough);
-  const html = customerEmailHtml(customer.name, senderName, platformName, detail, price, paidThrough);
+  const msg = customerSms(customer.name, senderName, platformName, price, paidThrough);
+  const html = customerEmailHtml(customer.name, senderName, platformName, price, paidThrough);
   await sendToCustomer(summary, userId, customer, `Lembrete de pagamento — ${platformName}`, msg, {
     slotId,
     dueValue: paidThrough,
