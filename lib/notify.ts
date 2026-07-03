@@ -49,7 +49,7 @@ async function sendSms(to: string, body: string): Promise<SendResult> {
   }
 }
 
-async function sendEmail(to: string, subject: string, body: string): Promise<SendResult> {
+async function sendEmail(to: string, subject: string, text: string, html?: string): Promise<SendResult> {
   if (!emailConfigured()) return { status: "dryrun" };
   try {
     const { Resend } = await import("resend");
@@ -58,7 +58,8 @@ async function sendEmail(to: string, subject: string, body: string): Promise<Sen
       from: process.env.RESEND_FROM!,
       to,
       subject,
-      text: body,
+      text,
+      ...(html ? { html } : {}),
     });
     if (error) return { status: "failed", error: String(error) };
     return { status: "sent" };
@@ -73,11 +74,18 @@ type NotifyArgs = {
   to: string;
   subject?: string;
   message: string;
+  html?: string; // rendered email only — SMS and the ReminderLog keep the plain `message`
   audience: "customer" | "owner";
   customerId?: string | null;
+  slotId?: string | null;
+  accountId?: string | null;
+  dueValue?: Date | null;
+  automatic?: boolean;
 };
 
-// Sends one notification AND records it in the ReminderLog.
+// Sends one notification AND records it in the ReminderLog. `slotId`/`accountId`
+// + `dueValue` are stored so the automatic run can dedup "already reminded for
+// this due date" (see runReminders in lib/reminders.ts).
 export async function notify(args: NotifyArgs): Promise<SendResult> {
   let result: SendResult;
   if (!args.to) {
@@ -85,13 +93,17 @@ export async function notify(args: NotifyArgs): Promise<SendResult> {
   } else if (args.channel === "sms") {
     result = await sendSms(args.to, args.message);
   } else {
-    result = await sendEmail(args.to, args.subject ?? "Reminder", args.message);
+    result = await sendEmail(args.to, args.subject ?? "Reminder", args.message, args.html);
   }
 
   await prisma.reminderLog.create({
     data: {
       userId: args.userId,
       customerId: args.customerId ?? null,
+      slotId: args.slotId ?? null,
+      accountId: args.accountId ?? null,
+      dueValue: args.dueValue ?? null,
+      automatic: args.automatic ?? true,
       audience: args.audience,
       channel: args.channel,
       to: args.to || null,

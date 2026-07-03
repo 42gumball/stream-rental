@@ -48,6 +48,11 @@ export function fmtDate(date: Date | null | undefined): string {
   return format(date, "dd/MM/yyyy");
 }
 
+export function fmtDateTime(date: Date | null | undefined): string {
+  if (!date) return "—";
+  return format(date, "dd/MM/yyyy HH:mm");
+}
+
 // "yyyy-MM-dd" for <input type="date"> values.
 export function toDateInput(date: Date | null | undefined): string {
   if (!date) return "";

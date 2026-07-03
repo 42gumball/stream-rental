@@ -1,12 +1,13 @@
 import { startOfMonth } from "date-fns";
-import { Bell, BadgeCheck, CreditCard } from "lucide-react";
+import { BadgeCheck, CreditCard } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { formatKz } from "@/lib/money";
 import { fmtDate, needsReminder, payStatus } from "@/lib/dates";
 import { getPlatform } from "@/lib/platforms";
 import { requireUserId } from "@/lib/dal";
 import { Stat, StatusBadge, SectionHeader, Empty } from "@/components/ui";
-import { markSlotPaid, payAccountBill, remindSlot } from "@/lib/actions";
+import { RemindButton } from "@/components/RemindButton";
+import { markSlotPaid, payAccountBill } from "@/lib/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -138,12 +139,7 @@ function DueCustomerCard({
         </div>
       </div>
       <div className="mt-3 flex gap-2">
-        <form action={remindSlot} className="flex-1">
-          <input type="hidden" name="id" value={id} />
-          <button className="btn btn-ghost btn-sm" type="submit" style={{ width: "100%" }}>
-            <Bell size={15} /> Remind
-          </button>
-        </form>
+        <RemindButton slotId={id} className="flex-1" />
         <form action={markSlotPaid} className="flex-1">
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="months" value="1" />

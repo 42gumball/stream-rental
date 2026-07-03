@@ -1,4 +1,4 @@
-import { Home, LayoutGrid, Users, Wallet, type LucideIcon } from "lucide-react";
+import { Home, LayoutGrid, Users, Wallet, Bell, type LucideIcon } from "lucide-react";
 
 export type NavTab = { href: string; label: string; icon: LucideIcon };
 
@@ -10,6 +10,7 @@ export const tabs: NavTab[] = [
   { href: "/accounts", label: "Platforms", icon: LayoutGrid },
   { href: "/customers", label: "People", icon: Users },
   { href: "/finances", label: "Money", icon: Wallet },
+  { href: "/reminders", label: "Reminders", icon: Bell },
 ];
 
 export function isActive(pathname: string, href: string) {

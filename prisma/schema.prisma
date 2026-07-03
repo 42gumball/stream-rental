@@ -31,6 +31,11 @@ model User {
   image        String? // avatar URL from Google
   createdAt    DateTime @default(now())
 
+  // Per-user kill switches for reminder channels. Checked before every send
+  // (automatic and manual) so a user can silence a channel entirely.
+  smsRemindersEnabled   Boolean @default(true)
+  emailRemindersEnabled Boolean @default(true)
+
   customers Customer[]
   accounts  Account[]
   payments  Payment[]
@@ -74,8 +79,9 @@ model Account {
   paidThrough   DateTime? // you have paid the platform up to this date
   createdAt     DateTime  @default(now())
 
-  slots    Slot[]
-  expenses Expense[]
+  slots        Slot[]
+  expenses     Expense[]
+  reminderLogs ReminderLog[]
 
   @@index([userId])
   @@index([platform])
@@ -96,7 +102,8 @@ model Slot {
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now())
 
-  payments Payment[]
+  payments     Payment[]
+  reminderLogs ReminderLog[]
 }
 
 /// Money coming IN — a customer paid you. Drives the revenue report.
@@ -137,13 +144,22 @@ model Expense {
   @@index([userId])
 }
 
-/// Audit log of every reminder sent (to customers or to you).
+/// Audit log of every reminder sent (to customers or to you). Also the source
+/// of truth for "already reminded" dedup: the automatic daily run skips a
+/// (slot|account, channel, dueValue) combination that already has a
+/// "sent"/"dryrun" row, so each due date only triggers one reminder.
 model ReminderLog {
   id         String    @id @default(cuid())
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  slotId     String? // set for customer share reminders — used for dedup
+  slot       Slot?     @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  accountId  String? // set for owner bill reminders — used for dedup
+  account    Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  dueValue   DateTime? // the paidThrough/dueDate this reminder was about
+  automatic  Boolean   @default(true) // false for manual "Remind" button sends — excluded from dedup
   audience   String // "customer" | "owner"
   channel    String // "sms" | "email"
   to         String?
@@ -154,4 +170,6 @@ model ReminderLog {
   sentAt     DateTime  @default(now())
 
   @@index([userId])
+  @@index([slotId, channel])
+  @@index([accountId, channel])
 }

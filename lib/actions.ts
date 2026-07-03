@@ -7,7 +7,7 @@ import { parseKz } from "@/lib/money";
 import { extendByMonths } from "@/lib/dates";
 import { getPlatform } from "@/lib/platforms";
 import { requireUserId } from "@/lib/dal";
-import { remindOneCustomer, runReminders } from "@/lib/reminders";
+import { remindOneCustomer } from "@/lib/reminders";
 
 // ---------- FormData helpers ----------
 function str(fd: FormData, key: string): string | null {
@@ -223,19 +223,41 @@ export async function markSlotPaid(fd: FormData) {
 }
 
 // ================= Reminders =================
-export async function remindSlot(fd: FormData) {
+export type RemindState = { ok: boolean; message: string };
+
+// Bound to the "Remind" button via useActionState (see components/RemindButton)
+// so the UI can show what actually happened instead of silently no-op'ing.
+export async function remindSlot(_prev: RemindState, fd: FormData): Promise<RemindState> {
   const userId = await requireUserId();
   const id = reqStr(fd, "id");
   const slot = await prisma.slot.findFirst({ where: { id, account: { userId } }, include: { account: true } });
-  if (!slot || !slot.customerId) return;
+  if (!slot || !slot.customerId) return { ok: false, message: "Customer not found." };
   const cfg = getPlatform(slot.account.platform);
   const detail = slot.name ? `${cfg.slotNoun} ${slot.name}` : slot.account.label;
-  await remindOneCustomer(userId, slot.customerId, cfg.name, detail, slot.price, slot.paidThrough);
+  const summary = await remindOneCustomer(userId, slot.customerId, cfg.name, detail, slot.price, slot.paidThrough, slot.id);
   revalidateAll();
+  const ok = summary.sent > 0 || summary.dryrun > 0;
+  return { ok, message: summary.details.join("; ") || (ok ? "Sent." : "Not sent.") };
 }
 
-export async function runRemindersNow() {
+// Per-user reminder channel kill switch (used by the Settings page's
+// ToggleSwitch). Returns the *confirmed* state so the switch never shows
+// "on" unless the write actually succeeded.
+export type ChannelState = { checked: boolean; error?: string };
+
+export async function setReminderChannel(_prev: ChannelState, fd: FormData): Promise<ChannelState> {
   const userId = await requireUserId();
-  await runReminders(userId);
-  revalidateAll();
+  const channel = reqStr(fd, "channel");
+  const enabled = fd.get("enabled") === "true";
+  try {
+    if (channel === "sms") {
+      await prisma.user.update({ where: { id: userId }, data: { smsRemindersEnabled: enabled } });
+    } else if (channel === "email") {
+      await prisma.user.update({ where: { id: userId }, data: { emailRemindersEnabled: enabled } });
+    }
+    revalidateAll();
+    return { checked: enabled };
+  } catch (e) {
+    return { checked: !enabled, error: e instanceof Error ? e.message : "Failed to save — try again." };
+  }
 }

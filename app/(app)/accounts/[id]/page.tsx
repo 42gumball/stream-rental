@@ -1,19 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Bell, CreditCard, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, CreditCard, Plus, Trash2 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { formatKz } from "@/lib/money";
 import { fmtDate, toDateInput } from "@/lib/dates";
 import { getPlatform } from "@/lib/platforms";
 import { requireUserId } from "@/lib/dal";
 import { StatusBadge, Empty } from "@/components/ui";
+import { RemindButton } from "@/components/RemindButton";
 import {
   addSlot,
   deleteAccount,
   deleteSlot,
   markSlotPaid,
   payAccountBill,
-  remindSlot,
   updateAccount,
   updateSlot,
 } from "@/lib/actions";
@@ -117,12 +117,7 @@ export default async function AccountDetail({ params }: { params: Promise<{ id: 
 
               {s.customerId && (
                 <div className="mt-3 flex gap-2">
-                  <form action={remindSlot} className="flex-1">
-                    <input type="hidden" name="id" value={s.id} />
-                    <button className="btn btn-ghost btn-sm" type="submit" style={{ width: "100%" }}>
-                      <Bell size={15} /> Remind
-                    </button>
-                  </form>
+                  <RemindButton slotId={s.id} className="flex-1" />
                   <form action={markSlotPaid} className="flex flex-1 gap-1">
                     <input type="hidden" name="id" value={s.id} />
                     <select name="months" className="select" defaultValue="1" style={{ padding: "7px 8px", fontSize: 13 }}>
