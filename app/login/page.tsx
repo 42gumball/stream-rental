@@ -5,6 +5,7 @@ import { loginWithEmail, signupWithEmail } from "@/lib/auth-actions";
 const ERRORS: Record<string, string> = {
   invalid: "Wrong email or password.",
   email: "Please enter a valid email address.",
+  name: "Please enter your first and last name.",
   password: "Password must be at least 8 characters.",
   exists: "An account with that email already exists. Try signing in.",
   google: "Google sign-in failed. Please try again.",
@@ -54,7 +55,10 @@ export default async function LoginPage({
 
         <form action={isSignup ? signupWithEmail : loginWithEmail} className="flex flex-col gap-3">
           {isSignup && (
-            <Field name="name" label="Name" type="text" placeholder="Your name" autoComplete="name" />
+            <div className="grid grid-cols-2 gap-3">
+              <Field name="firstName" label="First name" type="text" placeholder="First name" required autoComplete="given-name" />
+              <Field name="lastName" label="Last name" type="text" placeholder="Last name" required autoComplete="family-name" />
+            </div>
           )}
           <Field name="email" label="Email" type="email" placeholder="you@email.com" required autoComplete="email" />
           <Field

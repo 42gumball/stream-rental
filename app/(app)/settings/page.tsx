@@ -5,6 +5,8 @@ import { providerStatus } from "@/lib/notify";
 import { requireUserId, getCurrentUser } from "@/lib/dal";
 import { setReminderChannel } from "@/lib/actions";
 import { ToggleSwitch } from "@/components/ToggleSwitch";
+import { ProfileForm } from "@/components/ProfileForm";
+import { PasswordForm } from "@/components/PasswordForm";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +16,7 @@ export default async function SettingsPage() {
     getCurrentUser(),
     prisma.user.findUnique({
       where: { id: userId },
-      select: { smsRemindersEnabled: true, emailRemindersEnabled: true },
+      select: { smsRemindersEnabled: true, emailRemindersEnabled: true, passwordHash: true },
     }),
   ]);
   const { sms, email } = providerStatus();
@@ -26,8 +28,15 @@ export default async function SettingsPage() {
 
       <div className="card mb-4">
         <div className="label">Signed in as</div>
-        <div className="mt-1 font-semibold">{user?.name ?? "—"}</div>
-        <div className="text-sm muted">{user?.email}</div>
+        <div className="mb-3 text-sm muted">{user?.email}</div>
+        <ProfileForm defaultName={user?.name ?? ""} />
+      </div>
+
+      <div className="card mb-4">
+        <div className="label">Password</div>
+        <div className="mt-2">
+          <PasswordForm hasPassword={!!prefs?.passwordHash} />
+        </div>
       </div>
 
       <div className="card mb-4">

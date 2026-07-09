@@ -8,6 +8,7 @@ import { extendByMonths } from "@/lib/dates";
 import { getPlatform } from "@/lib/platforms";
 import { requireUserId } from "@/lib/dal";
 import { remindOneCustomer } from "@/lib/reminders";
+import { hashPassword, verifyPassword } from "@/lib/password";
 
 // ---------- FormData helpers ----------
 function str(fd: FormData, key: string): string | null {
@@ -259,4 +260,50 @@ export async function setReminderChannel(_prev: ChannelState, fd: FormData): Pro
   } catch (e) {
     return { checked: !enabled, error: e instanceof Error ? e.message : "Failed to save — try again." };
   }
+}
+
+// ================= Profile =================
+export type ProfileState = { ok: boolean; message: string };
+
+// Updates the account's display name — this is what reminder emails/SMS sign
+// off with (see lib/reminders.ts), so it's required to be a first + last name.
+export async function updateProfile(_prev: ProfileState, fd: FormData): Promise<ProfileState> {
+  const userId = await requireUserId();
+  const firstName = reqStr(fd, "firstName");
+  const lastName = reqStr(fd, "lastName");
+  if (!firstName || !lastName) {
+    return { ok: false, message: "Please enter your first and last name." };
+  }
+  const name = `${firstName} ${lastName}`;
+  await prisma.user.update({ where: { id: userId }, data: { name } });
+  revalidateAll();
+  return { ok: true, message: "Saved." };
+}
+
+export type PasswordState = { ok: boolean; message: string };
+
+// Changes the account's password. If the account has none yet (Google-only
+// sign-in), this sets one instead — no current password to verify in that case.
+export async function changePassword(_prev: PasswordState, fd: FormData): Promise<PasswordState> {
+  const userId = await requireUserId();
+  const currentPassword = reqStr(fd, "currentPassword");
+  const newPassword = reqStr(fd, "newPassword");
+  const confirmPassword = reqStr(fd, "confirmPassword");
+
+  if (newPassword.length < 8) {
+    return { ok: false, message: "New password must be at least 8 characters." };
+  }
+  if (newPassword !== confirmPassword) {
+    return { ok: false, message: "New passwords don't match." };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+  if (user?.passwordHash) {
+    if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+      return { ok: false, message: "Current password is incorrect." };
+    }
+  }
+
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(newPassword) } });
+  return { ok: true, message: user?.passwordHash ? "Password changed." : "Password set — you can now sign in with email too." };
 }

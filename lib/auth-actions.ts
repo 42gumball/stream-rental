@@ -10,19 +10,22 @@ const emailSchema = z.string().trim().toLowerCase().pipe(z.email());
 
 // Create an account with email + password, then sign in.
 export async function signupWithEmail(fd: FormData) {
-  const name = String(fd.get("name") ?? "").trim();
+  const firstName = String(fd.get("firstName") ?? "").trim();
+  const lastName = String(fd.get("lastName") ?? "").trim();
   const parsed = emailSchema.safeParse(fd.get("email"));
   const password = String(fd.get("password") ?? "");
 
   if (!parsed.success) redirect("/login?mode=signup&error=email");
+  if (!firstName || !lastName) redirect("/login?mode=signup&error=name");
   if (password.length < 8) redirect("/login?mode=signup&error=password");
   const email = parsed.data;
+  const name = `${firstName} ${lastName}`;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) redirect("/login?mode=signup&error=exists");
 
   const user = await prisma.user.create({
-    data: { email, name: name || null, passwordHash: await hashPassword(password) },
+    data: { email, name, passwordHash: await hashPassword(password) },
   });
   await startSession(user.id);
   redirect("/");
