@@ -61,7 +61,7 @@ async function sendEmail(to: string, subject: string, text: string, html?: strin
       text,
       ...(html ? { html } : {}),
     });
-    if (error) return { status: "failed", error: String(error) };
+    if (error) return { status: "failed", error: `Resend: ${error.message} (${error.name})` };
     return { status: "sent" };
   } catch (e) {
     return { status: "failed", error: e instanceof Error ? e.message : String(e) };
