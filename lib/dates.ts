@@ -1,4 +1,4 @@
-import { addMonths, differenceInCalendarDays, format } from "date-fns";
+import { addMonths, differenceInCalendarDays, format, startOfMonth } from "date-fns";
 
 export type PayStatus = "paid" | "due_soon" | "overdue" | "none";
 
@@ -57,6 +57,33 @@ export function fmtDateTime(date: Date | null | undefined): string {
 export function toDateInput(date: Date | null | undefined): string {
   if (!date) return "";
   return format(date, "yyyy-MM-dd");
+}
+
+// ---- Month helpers (used by the Money page's monthly history) ----
+
+// "yyyy-MM" key for a month — the value of an <input type="month"> and the
+// `month` URL param on the finances page.
+export function monthKey(date: Date): string {
+  return format(startOfMonth(date), "yyyy-MM");
+}
+
+// Parse a "yyyy-MM" string into the first instant of that month (local time).
+// Returns null for anything malformed so callers can fall back to a default.
+export function parseMonthKey(key: string | undefined | null): Date | null {
+  if (!key || !/^\d{4}-\d{2}$/.test(key)) return null;
+  const [y, m] = key.split("-").map(Number);
+  if (m < 1 || m > 12) return null;
+  return new Date(y, m - 1, 1);
+}
+
+// "July 2026" — a human month label.
+export function monthLabel(date: Date): string {
+  return format(date, "MMMM yyyy");
+}
+
+// "Jul" — short month label for chart axes.
+export function monthShort(date: Date): string {
+  return format(date, "MMM");
 }
 
 export function statusLabel(s: PayStatus): string {
